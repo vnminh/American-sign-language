@@ -11,14 +11,13 @@ from threading import Thread
 FILE_PATH_FOR_CLASS = os.path.join(os.pardir,'class_name.txt')
 CLASS_LIST = [name.strip() for name in open(FILE_PATH_FOR_CLASS,'r').readlines()]
 NUM_WORD = len(CLASS_LIST)
-SEQ_LEN = 30
+SEQ_LEN = 20
 IMAGE_CAM_HEIGHT = 480
 #SHARED THREAD VAR
 sample_queue = Queue(10) 
 #INIT MEDIAPIPE MODEL
-mp_pose = mp.solutions.pose.Pose(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5)
-mp_hands = mp.solutions.hands.Hands(static_image_mode=False, max_num_hands=2, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 mp_draw = mp.solutions.drawing_utils
+mp_holistic = mp.solutions.holistic.Holistic(static_image_mode = False, min_detection_confidence=0.5, min_tracking_confidence = 0.5)
 #-----------------------------------------------------------------------------------------------------------------
 @keras.saving.register_keras_serializable()
 class PositionalEncoding(keras.layers.Layer):
@@ -120,24 +119,23 @@ class ViTSignLanguageModel(keras.Model):
         return keras.models.Model(inputs=[x], outputs=self.call(x))
 
 #-----------------------------------------------------------------------------------------------------------------
-def drawLandmarks(image, res_pose, res_hand):
+def drawLandmarks(image, res):
     '''
     Function for draw landmark
     '''
-    def drawLandmarksPose(image, res):
-        if res.pose_landmarks:
-            mp_draw.draw_landmarks(image,res.pose_landmarks,mp.solutions.pose.POSE_CONNECTIONS)
+    def drawLandmarksPose(image, pose_landmarks):
+        if pose_landmarks:
+            mp_draw.draw_landmarks(image,pose_landmarks,mp.solutions.pose.POSE_CONNECTIONS)
 
-    def drawLandmarksHand(image, res):
-        if res.multi_hand_landmarks:
-            for hand in res.multi_hand_landmarks:
-                mp_draw.draw_landmarks(image,hand,mp.solutions.hands.HAND_CONNECTIONS)
+    def drawLandmarksHand(image, hand_landmarks):
+        if hand_landmarks:
+            mp_draw.draw_landmarks(image,hand_landmarks,mp.solutions.hands.HAND_CONNECTIONS)
 
+    drawLandmarksPose(image, res.pose_landmarks)
+    drawLandmarksHand(image, res.left_hand_landmarks)
+    drawLandmarksHand(image, res.right_hand_landmarks)
 
-    drawLandmarksPose(image, res_pose)
-    drawLandmarksHand(image, res_hand)
-
-def extract_keypoints(res_pose, res_hand, frame_size = (480,640)):
+def extract_keypoints(res_holistic, frame_size = (480,640)):
     def normalize_pose(list_of_landmarks, nose):
         head_metric = np.linalg.norm(list_of_landmarks[0] - list_of_landmarks[1])/2
         y_min, y_max = nose[1] - head_metric, nose[1] + 6*head_metric
@@ -153,23 +151,30 @@ def extract_keypoints(res_pose, res_hand, frame_size = (480,640)):
         y_center = (y_min + y_max)/2
         half_box_size = max(x_max-x_min,y_max-y_min)/2
         return (list_of_landmarks - np.array([x_center, y_center])) / half_box_size
-    if not res_pose.pose_landmarks: return np.zeros((12*2 + 42*2,))
+    
+    
+    if not res_holistic.pose_landmarks: return np.zeros((12*2 + 42*2,))
     #extract and normalize pose_landmarks (just shoulder and arms 11->22)
-    nose = np.array([res_pose.pose_landmarks.landmark[0].x, res_pose.pose_landmarks.landmark[0].y]) * np.array([frame_size[1], frame_size[0]])
-    pose_landmarks = np.array([[res_pose.pose_landmarks.landmark[i].x,
-                                res_pose.pose_landmarks.landmark[i].y] for i in range(11,23)]) if res_pose.pose_landmarks else np.zeros((12,2))
+    nose = np.array([res_holistic.pose_landmarks.landmark[0].x, res_holistic.pose_landmarks.landmark[0].y]) * np.array([frame_size[1], frame_size[0]])
+    pose_landmarks = np.array([[res_holistic.pose_landmarks.landmark[i].x,
+                                res_holistic.pose_landmarks.landmark[i].y] for i in range(11,23)]) if res_holistic.pose_landmarks else np.zeros((12,2))
     #scale to absolute coordinate of image
     pose_landmarks = pose_landmarks * np.array([frame_size[1], frame_size[0]])
     pose_landmarks = normalize_pose(pose_landmarks, nose)
+
     #extract and normalize hand_landmarks
     hand_landmarks = {'Left':np.zeros((21,2),dtype=np.double),'Right':np.zeros((21,2),dtype=np.double)}
-    if res_hand.multi_hand_world_landmarks:
-      for hand, handedness in zip(res_hand.multi_hand_landmarks, res_hand.multi_handedness):
-        hand_label = handedness.classification[0].label
-        hand_landmarks[hand_label] = np.array([[landmark.x,landmark.y] for landmark in hand.landmark],dtype=np.double)
+    if res_holistic.left_hand_landmarks:
+        hand_landmarks['Left'] = np.array([[landmark.x,landmark.y] for landmark in res_holistic.left_hand_landmarks.landmark],dtype=np.double)
         #scale to absolute coordinate of image
-        hand_landmarks[hand_label] = hand_landmarks[hand_label]* np.array([frame_size[1], frame_size[0]])
-        hand_landmarks[hand_label] = normalize_hand(hand_landmarks[hand_label])
+        hand_landmarks['Left'] = hand_landmarks['Left']* np.array([frame_size[1], frame_size[0]])
+        hand_landmarks['Left'] = normalize_hand(hand_landmarks['Left'])
+
+    if res_holistic.right_hand_landmarks:
+        hand_landmarks['Right'] = np.array([[landmark.x,landmark.y] for landmark in res_holistic.right_hand_landmarks.landmark],dtype=np.double)
+        #scale to absolute coordinate of image
+        hand_landmarks['Right'] = hand_landmarks['Right']* np.array([frame_size[1], frame_size[0]])
+        hand_landmarks['Right'] = normalize_hand(hand_landmarks['Right'])
 
     return np.concatenate((pose_landmarks,hand_landmarks['Left'], hand_landmarks['Right']), axis = None)
 
@@ -191,12 +196,11 @@ def feed():
         frame = cv2.resize(frame,(int(frame.shape[1]*scale), int(frame.shape[0]*scale)))
         frame = cv2.flip(frame, 1)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        res_pose = mp_pose.process(frame_rgb)
-        res_hand = mp_hands.process(frame_rgb)
+        res = mp_holistic.process(frame_rgb)
         #Extract
-        time_seq_feature.append(extract_keypoints(res_pose, res_hand, frame_rgb.shape))
+        time_seq_feature.append(extract_keypoints(res, frame_rgb.shape))
         #display
-        drawLandmarks(frame, res_pose, res_hand)
+        drawLandmarks(frame, res)
         cv2.imshow('video',frame)
         #Put to queue
         if len(time_seq_feature) == SEQ_LEN:

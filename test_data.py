@@ -66,8 +66,8 @@ class TransformerEncoder(keras.layers.Layer):
 class ViTSignLanguageModel(keras.Model):
     def __init__(self, seq_len, feature_dim, num_classes, **kwargs):
         super(ViTSignLanguageModel, self).__init__()
-        self.conv1 = keras.layers.Conv1D(128, kernel_size=3, activation='gelu', padding='valid')
-        self.conv2 = keras.layers.Conv1D(128, kernel_size=3, activation='gelu', padding='valid')
+        self.conv1 = keras.layers.Conv1D(128, kernel_size=3, activation='gelu', padding='same')
+        self.conv2 = keras.layers.Conv1D(128, kernel_size=3, activation='gelu', padding='same')
         self.bi_lstm1 = keras.layers.Bidirectional(keras.layers.LSTM(128, return_sequences=True, activation='gelu'),merge_mode="sum")
         self.bi_lstm2 = keras.layers.Bidirectional(keras.layers.LSTM(128, return_sequences=True, activation='gelu'),merge_mode="sum")
         self.pos_encoding = PositionalEncoding(seq_len - 2*2, 128)

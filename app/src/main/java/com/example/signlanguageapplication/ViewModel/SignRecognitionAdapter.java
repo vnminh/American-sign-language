@@ -1,5 +1,8 @@
 package com.example.signlanguageapplication.ViewModel;
 
+import android.content.Context;
+import android.os.AsyncTask;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
@@ -7,13 +10,15 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.signlanguageapplication.Database.SignRecognitionDatabase;
 import com.example.signlanguageapplication.Model.SignRecognitionResult;
 import com.example.signlanguageapplication.databinding.ItemSignRecognitionBinding;
 
 import java.util.ArrayList;
 
 public class SignRecognitionAdapter extends RecyclerView.Adapter<SignRecognitionAdapter.SignViewHolder> {
-    private ArrayList<SignRecognitionResult> signList = new ArrayList<SignRecognitionResult>();
+    private ArrayList<SignRecognitionResult> signList = new ArrayList<>();
+
 
     @NonNull
     @Override

@@ -61,22 +61,22 @@ class TransformerEncoder(keras.layers.Layer):
         ffn_output = self.ffn(norm2) + norm2
         return ffn_output
 
-
 @keras.saving.register_keras_serializable()
 class ViTSignLanguageModel(keras.Model):
     def __init__(self, seq_len, feature_dim, num_classes, **kwargs):
         super(ViTSignLanguageModel, self).__init__()
         self.conv1 = keras.layers.Conv1D(128, kernel_size=3, activation='gelu', padding='same')
         self.conv2 = keras.layers.Conv1D(128, kernel_size=3, activation='gelu', padding='same')
-        self.bi_lstm1 = keras.layers.Bidirectional(keras.layers.LSTM(128, return_sequences=True, activation='gelu'),merge_mode="sum")
-        self.bi_lstm2 = keras.layers.Bidirectional(keras.layers.LSTM(128, return_sequences=True, activation='gelu'),merge_mode="sum")
-        self.pos_encoding = PositionalEncoding(seq_len - 2*2, 128)
+        self.bi_lstm = keras.layers.Bidirectional(keras.layers.LSTM(128, return_sequences=True, activation='gelu'),merge_mode="sum")
+        # self.bi_lstm1 = keras.layers.Bidirectional(keras.layers.LSTM(128, return_sequences=True, activation='gelu'),merge_mode="sum")
+        # self.bi_lstm2 = keras.layers.Bidirectional(keras.layers.LSTM(128, return_sequences=True, activation='gelu'),merge_mode="sum")
+        self.pos_encoding = PositionalEncoding(seq_len, 128)
         self.class_token = self.add_weight(shape=(1, 1, 128), initializer=keras.initializers.zeros(), trainable=True, name='class_token')
         self.lamda = keras.layers.Lambda(
             lambda tensor: keras.layers.concatenate((keras.ops.repeat(self.class_token, keras.ops.shape(tensor)[0], axis=0), tensor), axis = 1),
-            output_shape=(seq_len - 2*2 + 1, 128))
+            output_shape=(seq_len + 1, 128))
         self.dropout0 = keras.layers.Dropout(0.1)
-        self.encoders = [TransformerEncoder(128, 8, 512) for _ in range(12)]
+        self.encoders = [TransformerEncoder(128, 16, 512) for _ in range(12)]
         # self.dense1 = keras.layers.Dense(128, activation='linear')
         self.norm1 = keras.layers.LayerNormalization(epsilon=1e-6)
         # self.dense2 = keras.layers.Dense(1024, activation='linear')
@@ -86,8 +86,9 @@ class ViTSignLanguageModel(keras.Model):
     def call(self, inputs):
         x = self.conv1(inputs)
         x = self.conv2(x)
-        x = self.bi_lstm1(x)
-        x = self.bi_lstm2(x)
+        x = self.bi_lstm(x)
+        # x = self.bi_lstm1(x)
+        # x = self.bi_lstm2(x)
         x = self.pos_encoding(x)
         x = self.lamda(x)
         x = self.dropout0(x)
@@ -208,7 +209,7 @@ def feed():
                 sample_queue.put([np.array([time_seq_feature])])
             except Exception as e:
                 print('FEED THREAD:',e)
-            time_seq_feature = time_seq_feature[-20:]
+            time_seq_feature = []
         if cv2.waitKey(1)&0xFF == ord('q'):
             break
     #END
@@ -235,7 +236,7 @@ def predict(my_model: keras.Model):
         print('PREDICT THREAD:','predict word','\033[30;31m'+CLASS_LIST[class_id]+'\033[0m'+f': {round(y[0][class_id]*100)}')
 
 if __name__=='__main__':
-    my_model = keras.models.load_model(os.path.join(os.pardir,'Model','model_05_03_2025_16_14_1741191281.keras'))
+    my_model = keras.models.load_model(os.path.join(os.pardir,'Model','model_13_03_2025_05_07_1741842439.keras'))
     feed_thread = Thread(target=feed)
     predict_thread = Thread(target=predict,args=(my_model,))
     feed_thread.start()

@@ -66,31 +66,32 @@ class TransformerEncoder(keras.layers.Layer):
 class ViTSignLanguageModel(keras.Model):
     def __init__(self, seq_len, feature_dim, num_classes, **kwargs):
         super(ViTSignLanguageModel, self).__init__()
-        self.conv1 = keras.layers.Conv1D(128, kernel_size=3, activation='linear', padding='same')
-        self.conv2 = keras.layers.Conv1D(128, kernel_size=3, activation='linear', padding='same')
-        self.bi_lstm = keras.layers.Bidirectional(keras.layers.LSTM(128, return_sequences=True, activation='linear'),merge_mode="sum")
-        self.pos_encoding = PositionalEncoding(seq_len, 128)
-        self.class_token = self.add_weight(shape=(1, 1, 128), initializer=keras.initializers.zeros(), trainable=True, name='class_token')
+        self.conv1 = keras.layers.Conv1D(108, kernel_size=3, activation='linear', padding='same')
+        self.conv2 = keras.layers.Conv1D(108, kernel_size=3, activation='linear', padding='same')
+        self.pos_encoding = PositionalEncoding(seq_len, 108)
+        self.class_token = self.add_weight(shape=(1, 1, 108), initializer= keras.initializers.RandomNormal(mean=0.0, stddev=1), trainable=True, name='class_token')
         self.lamda = keras.layers.Lambda(
             lambda tensor: keras.layers.concatenate((keras.ops.repeat(self.class_token, keras.ops.shape(tensor)[0], axis=0), tensor), axis = 1),
-            output_shape=(seq_len + 1, 128))
+            output_shape=(seq_len + 1, 108))
         self.dropout = keras.layers.Dropout(0.2)
-        self.encoders = [TransformerEncoder(128, 16, 512) for _ in range(12)]
-        self.norm = keras.layers.LayerNormalization(epsilon=1e-6)
+        self.encoders = [TransformerEncoder(108, 9, 512) for _ in range(6)]
+        self.glo_avg_pool = keras.layers.GlobalAveragePooling1D()
+        self.norm3 = keras.layers.LayerNormalization(epsilon=1e-6)
         self.dense3 = keras.layers.Dense(num_classes, activation='softmax')
+        
 
     def call(self, inputs):
-        x = self.conv1(inputs)
-        x = self.conv2(x)
-        x = self.bi_lstm(x)
-        x = self.pos_encoding(x)
-        x = self.lamda(x)
+        x = self.conv1(inputs) + inputs
+        y = self.conv2(x) + x
+        x = self.lamda(y)
         x = self.dropout(x)
         for encoder in self.encoders:
             x = encoder(x)
         x = x[...,0,:]
-        x = self.norm(x)
-        return self.dense3(x)
+        y = self.glo_avg_pool(y)
+        z = x + y
+        z = self.norm3(z)
+        return self.dense3(z)
 
     def get_config(self):
       return {
@@ -190,7 +191,7 @@ def feed():
     Task of feed thread
     '''
     video_reader =  cv2.VideoCapture(0)
-    # video_reader =  cv2.VideoCapture(os.path.join(os.pardir,'dataset','DataSet','___','d3.mp4'))
+    # video_reader =  cv2.VideoCapture(os.path.join(os.pardir,'dataset','DataSet','___','d7.mp4'))
     #Init
     time_seq_feature = []
     #Loop    
@@ -240,12 +241,11 @@ def predict(my_model: keras.Model):
         y = my_model.predict(x[0],verbose=0)
         class_id = np.argmax(y)
         # print('PREDICT THREAD:','predict word','\033[30;31m'+CLASS_LIST[class_id]+'\033[0m'+f': {round(y[0][class_id]*100)}')
-        if y[0][class_id] < 0.9: class_id = len(CLASS_LIST) - 1
+        if y[0][class_id] < 0.85: class_id = len(CLASS_LIST) - 1
         print('PREDICT THREAD:','predict word','\033[30;31m'+CLASS_LIST[class_id]+'\033[0m')
 
-
 if __name__=='__main__':
-    my_model = keras.models.load_model(os.path.join(os.pardir,'Model','model_22_04_2025_02_10_1745287819_lstm_new_data_treat.keras'))
+    my_model = keras.models.load_model(os.path.join(os.pardir,'Model','model_23_04_2025_05_38_1745386680_no_lstm_9_head_new_treat_data.keras'))
     feed_thread = Thread(target=feed)
     predict_thread = Thread(target=predict,args=(my_model,))
     feed_thread.start()

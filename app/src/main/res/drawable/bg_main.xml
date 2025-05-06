@@ -1,0 +1,5 @@
+<!-- res/drawable/bg_cur_text.xml -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#324aa8"/> <!-- Use your theme color -->
+    <padding android:left="16dp" android:top="8dp" android:right="16dp" android:bottom="8dp"/>
+</shape>

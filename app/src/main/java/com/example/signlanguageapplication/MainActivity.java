@@ -102,13 +102,26 @@ public class MainActivity extends AppCompatActivity {
             public void onChanged(ArrayList<SignRecognitionResult> signRecognitionResults) {
                 Log.d("DEBUG","Catch update event");
                 adapter.updateSignList(signRecognitionResults);
+                Log.d("DEBUG","Size: " + signRecognitionResults.size());
+                if(signRecognitionResults.isEmpty()) {
+                    binding.curText.setText("");
+                }
+                else {
+                    String latestSignName = signRecognitionResults.get(0).getSignName();
+                    binding.curText.setText(latestSignName);
+                }
                 binding.rvSignResult.scrollToPosition(0); // Scroll to top after updating list
             }
+        });
+
+        binding.toggleSound.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            viewModel.setAutoSpeakEnabled(isChecked);
         });
 
         AsyncTask.execute(new Runnable() {
             @Override
             public void run() {
+//                SignRecognitionDatabase.getInstance(getApplicationContext()).signRecognitionDao().clearDatabase();
                 ArrayList<SignRecognitionResult> newList = (ArrayList<SignRecognitionResult>) SignRecognitionDatabase.getInstance(getApplicationContext()).signRecognitionDao().getAllSignResults();
                 viewModel.setSignList(newList);
             }

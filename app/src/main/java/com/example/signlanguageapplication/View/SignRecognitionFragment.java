@@ -26,6 +26,7 @@ import com.example.signlanguageapplication.ViewModel.SignRecognitionViewModel;
 import com.example.signlanguageapplication.databinding.FragmentSignRecognitionBinding;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class SignRecognitionFragment extends Fragment {
 
@@ -46,30 +47,41 @@ public class SignRecognitionFragment extends Fragment {
 
         setupRecyclerView();
         setupViewModel();
+        setupToggleButton();
         loadDataFromDatabase();
+        debugDatabase(); // Log database data
     }
 
     private void setupRecyclerView() {
-        this.adapter = new SignRecognitionAdapter();
+        adapter = new SignRecognitionAdapter();
         binding.rvSignResult.setAdapter(adapter);
         binding.rvSignResult.setLayoutManager(new LinearLayoutManager(requireContext()));
     }
 
     private void setupViewModel() {
-        // Use ViewModelFactory to pass context to ViewModel
         viewModel = new ViewModelProvider(this).get(SignRecognitionViewModel.class);
-
-        // Connect to server
         viewModel.connectToServer();
 
-        // Observe data changes
         viewModel.getSignList().observe(getViewLifecycleOwner(), new Observer<ArrayList<SignRecognitionResult>>() {
             @Override
             public void onChanged(ArrayList<SignRecognitionResult> signRecognitionResults) {
                 Log.d("DEBUG", "Catch update event");
                 adapter.updateSignList(signRecognitionResults);
-                binding.rvSignResult.scrollToPosition(0); // Scroll to top after updating list
+                Log.d("DEBUG", "Size: " + signRecognitionResults.size());
+                if (signRecognitionResults.isEmpty()) {
+                    binding.curText.setText("");
+                } else {
+                    String latestSignName = signRecognitionResults.get(0).getSignName();
+                    binding.curText.setText(latestSignName);
+                }
+                binding.rvSignResult.scrollToPosition(0);
             }
+        });
+    }
+
+    private void setupToggleButton() {
+        binding.toggleSound.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            viewModel.setAutoSpeakEnabled(isChecked);
         });
     }
 
@@ -79,7 +91,20 @@ public class SignRecognitionFragment extends Fragment {
                     SignRecognitionDatabase.getInstance(requireContext())
                             .signRecognitionDao()
                             .getAllSignResults();
+            Log.d("Database", "Loaded " + newList.size() + " results from database");
             viewModel.setSignList(newList);
+        });
+    }
+
+    private void debugDatabase() {
+        SignRecognitionDatabase.getDatabaseWriteExecutor().execute(() -> {
+            List<SignRecognitionResult> results = SignRecognitionDatabase.getInstance(requireContext())
+                    .signRecognitionDao()
+                    .getAllSignResults();
+            Log.d("DatabaseDebug", "Database size: " + results.size());
+            for (SignRecognitionResult result : results) {
+                Log.d("DatabaseDebug", "Result: " + result.toString());
+            }
         });
     }
 
@@ -121,6 +146,13 @@ public class SignRecognitionFragment extends Fragment {
             }
         }
         adapter.updateSignList(filteredList);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        loadDataFromDatabase(); // Reload from database when fragment is resumed
+        debugDatabase(); // Debug database data
     }
 
     @Override

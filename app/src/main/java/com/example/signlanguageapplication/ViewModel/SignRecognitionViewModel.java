@@ -28,23 +28,27 @@ public class SignRecognitionViewModel extends AndroidViewModel {
     private final ExecutorService processingService = Executors.newSingleThreadExecutor();
     private Socket socket;
     private InputStream inputStream = null;
-    private final String SERVER_ADDRESS = "192.168.1.18";
+    private final String SERVER_ADDRESS = "192.168.1.7";
     private final int SERVER_PORT = 6969;
     private boolean isRunning = true;
     private final Queue<String> messageQueue = new LinkedList<>();
-    
     private SignRecognitionDao recognitionDao;
-    
     private TextToSpeech textToSpeech = null;
+    private boolean isAutoSpeakEnabled = false;
 
-    private boolean isAutoSpeakEnabled = false; // Default to ON
-
+    /**
+     * Initializes the ViewModel and sets up the database and TextToSpeech.
+     * @param application
+     */
     public SignRecognitionViewModel(Application application) {
         super(application);
         this.recognitionDao = SignRecognitionDatabase.getInstance(application).signRecognitionDao();
         textToSpeech = new TextToSpeech(application.getApplicationContext(), status -> {
             if (status == TextToSpeech.SUCCESS) {
                 textToSpeech.setLanguage(Locale.US);
+                Log.d("TTS", "TextToSpeech initialized successfully");
+            } else {
+                Log.e("TTS", "TextToSpeech initialization failed with status: " + status);
             }
         });
     }
@@ -59,13 +63,14 @@ public class SignRecognitionViewModel extends AndroidViewModel {
 
     public void setAutoSpeakEnabled(boolean enabled) {
         isAutoSpeakEnabled = enabled;
+        Log.d("TTS", "AutoSpeakEnabled set to: " + enabled);
     }
 
     public void connectToServer() {
         executorService.execute(() -> {
             while (isRunning) {
                 try {
-                    Log.d("Client", "Trying to connect to server...");
+                    Log.d("Client", "Trying to connect to server at " + SERVER_ADDRESS + ":" + SERVER_PORT);
                     socket = new Socket(SERVER_ADDRESS, SERVER_PORT);
                     inputStream = socket.getInputStream();
                     Log.d("Client", "Connected to server!");
@@ -127,12 +132,18 @@ public class SignRecognitionViewModel extends AndroidViewModel {
                 }
 
                 if (receiveData != null) {
+                    Log.d("Queue", "Processing data: " + receiveData);
                     String[] parts = receiveData.split("\\|");
                     if (parts.length == 2) {
                         String signName = parts[0].trim();
                         String timestamp = parts[1].trim();
                         Log.d("SignName", signName);
                         Log.d("Timestamp", timestamp);
+
+                        if (signName.isEmpty() || timestamp.isEmpty()) {
+                            Log.w("Queue", "Invalid data: signName or timestamp is empty");
+                            continue;
+                        }
 
                         ArrayList<SignRecognitionResult> currentSignList = new ArrayList<>(this.signList.getValue());
 
@@ -145,17 +156,24 @@ public class SignRecognitionViewModel extends AndroidViewModel {
                                 }
 
                                 SignRecognitionResult result = new SignRecognitionResult(currentString.trim(), timestamp);
-                                AsyncTask.execute(() -> {
-                                    recognitionDao.insert(result);
-                                    Log.d("DEBUG", "Insert data: " + result.toString());
+                                SignRecognitionDatabase.getDatabaseWriteExecutor().execute(() -> {
+                                    try {
+                                        recognitionDao.insert(result);
+                                        Log.d("Database", "Inserted data: " + result.toString());
+                                    } catch (Exception e) {
+                                        Log.e("Database", "Failed to insert data: " + result.toString(), e);
+                                    }
                                 });
-                                if (isAutoSpeakEnabled) {
+                                if (isAutoSpeakEnabled && textToSpeech != null) {
                                     textToSpeech.speak(currentString, TextToSpeech.QUEUE_FLUSH, null, null);
+                                    Log.d("TTS", "Speaking: " + currentString);
                                 }
                                 currentString = "";
                                 isNewLineAdded = false;
                                 this.signList.postValue(currentSignList);
                                 Log.d("Client cập nhật", "Đã lưu câu hoàn chỉnh vào DB");
+                            } else {
+                                Log.w("Queue", "currentString is empty, skipping insert");
                             }
                         } else if (!isNewLineAdded) {
                             currentString += signName + " ";
@@ -169,6 +187,8 @@ public class SignRecognitionViewModel extends AndroidViewModel {
                             this.signList.postValue(currentSignList);
                             Log.d("Client cập nhật", "Đã cập nhật chuỗi: " + currentString);
                         }
+                    } else {
+                        Log.w("Queue", "Invalid data format: " + receiveData);
                     }
                 }
             }
@@ -185,6 +205,7 @@ public class SignRecognitionViewModel extends AndroidViewModel {
                 socket.close();
                 socket = null;
             }
+            Log.d("Client", "Socket closed");
         } catch (IOException e) {
             Log.e("Client", "Error closing socket", e);
         }
@@ -199,6 +220,7 @@ public class SignRecognitionViewModel extends AndroidViewModel {
         if (textToSpeech != null) {
             textToSpeech.stop();
             textToSpeech.shutdown();
+            Log.d("TTS", "TextToSpeech shut down");
         }
         closeSocket();
     }

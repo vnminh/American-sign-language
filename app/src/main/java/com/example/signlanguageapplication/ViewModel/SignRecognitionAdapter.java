@@ -29,9 +29,9 @@ public class SignRecognitionAdapter extends RecyclerView.Adapter<SignRecognition
         return new SignViewHolder(binding);
     }
 
-    @Override   
+    @Override
     public void onBindViewHolder(@NonNull SignViewHolder holder, int position) {
-        holder.bind(signList.get(position),position);
+        holder.bind(signList.get(position), position);
     }
 
     @Override
@@ -50,10 +50,10 @@ public class SignRecognitionAdapter extends RecyclerView.Adapter<SignRecognition
         notifyItemInserted(0);
     }
 
-    // Định nghĩa ViewHodler để render item
     static class SignViewHolder extends RecyclerView.ViewHolder {
         private final ItemSignRecognitionBinding binding;
-        private TextToSpeech textToSpeech = null;
+        private TextToSpeech textToSpeech;
+
         public SignViewHolder(ItemSignRecognitionBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
@@ -65,29 +65,25 @@ public class SignRecognitionAdapter extends RecyclerView.Adapter<SignRecognition
             binding.tvSignName.setSelected(true);
 
             binding.imgSpeaker.setOnClickListener(v -> speakSignName());
-
         }
 
         private void speakSignName() {
-            String text = (String) binding.tvSignName.getText().toString();
+            String text = binding.tvSignName.getText().toString();
             if (text != null) {
                 textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
             }
         }
 
-        public void bind(SignRecognitionResult result,int position) {
-            this.binding.tvSignName.setText(result.getSignName());
-            this.binding.tvTimestamp.setText(result.getTimestamp());
+        public void bind(SignRecognitionResult result, int position) {
+            binding.tvSignName.setText(result.getSignName());
+            binding.tvTimestamp.setText(result.getTimestamp());
 
             if (position == 0) {
                 binding.horizontalScrollView.post(() -> {
                     binding.horizontalScrollView.fullScroll(HorizontalScrollView.FOCUS_RIGHT);
                 });
             }
-
-
         }
-
     }
 
     static class SignDiffCallback extends DiffUtil.Callback {

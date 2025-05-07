@@ -19,7 +19,6 @@ import java.util.ArrayList;
 public class SignRecognitionAdapter extends RecyclerView.Adapter<SignRecognitionAdapter.SignViewHolder> {
     private ArrayList<SignRecognitionResult> signList = new ArrayList<>();
 
-
     @NonNull
     @Override
     public SignViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {

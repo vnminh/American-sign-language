@@ -1,8 +1,11 @@
 package com.example.signlanguageapplication.ViewModel;
 
+import android.app.Application;
 import android.content.Context;
 import android.os.AsyncTask;
 import android.util.Log;
+
+import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
@@ -18,20 +21,22 @@ import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class SignRecognitionViewModel extends ViewModel {
+public class SignRecognitionViewModel extends AndroidViewModel {
     private final MutableLiveData<ArrayList<SignRecognitionResult>> signList = new MutableLiveData<>(new ArrayList<>());
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private Socket socket;
     private InputStream inputStream = null;
-    private final String SERVER_ADDRESS = "172.20.10.3";
+    private final String SERVER_ADDRESS = "192.168.1.18";
     private final int SERVER_PORT = 6969;
     private boolean isRunning = true;  // Flag to keep track of server connection
 
     private SignRecognitionDao recognitionDao;
 
-    public SignRecognitionViewModel(Context context) {
-        this.recognitionDao = SignRecognitionDatabase.getInstance(context).signRecognitionDao();
+    public SignRecognitionViewModel(Application application) {
+        super(application);
+        this.recognitionDao = SignRecognitionDatabase.getInstance(application).signRecognitionDao();
     }
+
     public LiveData<ArrayList<SignRecognitionResult>> getSignList() {
         return this.signList;
     }

@@ -16,12 +16,14 @@
             android:id="@+id/tv_sign_name"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp"
 
             android:textSize="18sp"
             android:textColor="@android:color/black"
             android:textStyle="bold"
             android:ellipsize="end"
-            android:maxLines="1"
+            android:maxLines="2"
 
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toStartOf="@id/tv_timestamp"

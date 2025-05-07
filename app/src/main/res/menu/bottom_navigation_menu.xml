@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    app:showAsAction="ifRoom|collapseActionView"
+    app:labelVisibilityMode="unlabeled">
+    <item
+        android:id="@+id/homeFragment"
+        android:icon="@drawable/ic_home"
+        android:title="Home"/>
+    <item
+        android:id="@+id/signRecognitionFragment"
+        android:icon="@drawable/ic_recognition"
+        android:title="Recognition"/>
+    <item
+        android:id="@+id/dictionaryFragment"
+        android:icon="@drawable/ic_dictionary"
+        android:title="Dictionary"/>
+    <item
+        android:id="@+id/settings"
+        android:icon="@drawable/ic_setting_solid"
+        android:title="Settings"/>
+</menu>

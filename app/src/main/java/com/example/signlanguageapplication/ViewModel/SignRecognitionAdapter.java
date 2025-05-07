@@ -2,9 +2,11 @@ package com.example.signlanguageapplication.ViewModel;
 
 import android.content.Context;
 import android.os.AsyncTask;
+import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
+import android.widget.HorizontalScrollView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.DiffUtil;
@@ -15,6 +17,7 @@ import com.example.signlanguageapplication.Model.SignRecognitionResult;
 import com.example.signlanguageapplication.databinding.ItemSignRecognitionBinding;
 
 import java.util.ArrayList;
+import java.util.Locale;
 
 public class SignRecognitionAdapter extends RecyclerView.Adapter<SignRecognitionAdapter.SignViewHolder> {
     private ArrayList<SignRecognitionResult> signList = new ArrayList<>();
@@ -26,9 +29,9 @@ public class SignRecognitionAdapter extends RecyclerView.Adapter<SignRecognition
         return new SignViewHolder(binding);
     }
 
-    @Override
+    @Override   
     public void onBindViewHolder(@NonNull SignViewHolder holder, int position) {
-        holder.bind(signList.get(position));
+        holder.bind(signList.get(position),position);
     }
 
     @Override
@@ -50,16 +53,41 @@ public class SignRecognitionAdapter extends RecyclerView.Adapter<SignRecognition
     // Định nghĩa ViewHodler để render item
     static class SignViewHolder extends RecyclerView.ViewHolder {
         private final ItemSignRecognitionBinding binding;
-
+        private TextToSpeech textToSpeech = null;
         public SignViewHolder(ItemSignRecognitionBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            textToSpeech = new TextToSpeech(binding.getRoot().getContext(), status -> {
+                if (status == TextToSpeech.SUCCESS) {
+                    textToSpeech.setLanguage(Locale.US);
+                }
+            });
+            binding.tvSignName.setSelected(true);
+
+            binding.imgSpeaker.setOnClickListener(v -> speakSignName());
+
         }
 
-        public void bind(SignRecognitionResult result) {
+        private void speakSignName() {
+            String text = (String) binding.tvSignName.getText().toString();
+            if (text != null) {
+                textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
+            }
+        }
+
+        public void bind(SignRecognitionResult result,int position) {
             this.binding.tvSignName.setText(result.getSignName());
             this.binding.tvTimestamp.setText(result.getTimestamp());
+
+            if (position == 0) {
+                binding.horizontalScrollView.post(() -> {
+                    binding.horizontalScrollView.fullScroll(HorizontalScrollView.FOCUS_RIGHT);
+                });
+            }
+
+
         }
+
     }
 
     static class SignDiffCallback extends DiffUtil.Callback {

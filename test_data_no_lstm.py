@@ -6,6 +6,8 @@ import tensorflow as tf
 import keras
 from queue import Queue
 from threading import Thread
+import cvzone
+from cvzone.SelfiSegmentationModule import SelfiSegmentation
 
 #GLOBAL VAR
 FILE_PATH_FOR_CLASS = os.path.join(os.pardir,'class_name.txt')
@@ -113,6 +115,12 @@ class ViTSignLanguageModel(keras.Model):
         return keras.models.Model(inputs=[x], outputs=self.call(x))
 
 #-----------------------------------------------------------------------------------------------------------------
+def removeBackground(image):
+    segmentor = SelfiSegmentation()
+    green = (0, 255, 0)
+    imgNoBg = segmentor.removeBG(image, green, cutThreshold=0.50)
+    return imgNoBg
+
 def drawLandmarks(image, res):
     '''
     Function for draw landmark
@@ -191,7 +199,7 @@ def feed():
     Task of feed thread
     '''
     video_reader =  cv2.VideoCapture(0)
-    # video_reader =  cv2.VideoCapture(os.path.join(os.pardir,'dataset','DataSet','___','d7.mp4'))
+    # video_reader =  cv2.VideoCapture(os.path.join(os.pardir,'dataset','DataSet','often','d7.mp4'))
     #Init
     time_seq_feature = []
     #Loop    
@@ -203,6 +211,8 @@ def feed():
         scale = IMAGE_CAM_HEIGHT / frame.shape[0]
         frame = cv2.resize(frame,(int(frame.shape[1]*scale), int(frame.shape[0]*scale)))
         frame = cv2.flip(frame, 1)
+        #remove backgroung
+        # frame = removeBackground(frame)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         res = mp_holistic.process(frame_rgb)
         #Extract
@@ -240,12 +250,12 @@ def predict(my_model: keras.Model):
             break
         y = my_model.predict(x[0],verbose=0)
         class_id = np.argmax(y)
-        # print('PREDICT THREAD:','predict word','\033[30;31m'+CLASS_LIST[class_id]+'\033[0m'+f': {round(y[0][class_id]*100)}')
-        if y[0][class_id] < 0.85: class_id = len(CLASS_LIST) - 1
-        print('PREDICT THREAD:','predict word','\033[30;31m'+CLASS_LIST[class_id]+'\033[0m')
+        print('PREDICT THREAD:','predict word','\033[30;31m'+CLASS_LIST[class_id]+'\033[0m'+f': {round(y[0][class_id]*100)}')
+        # if y[0][class_id] < 0.85: class_id = len(CLASS_LIST) - 1
+        # print('PREDICT THREAD:','predict word','\033[30;31m'+CLASS_LIST[class_id]+'\033[0m')
 
 if __name__=='__main__':
-    my_model = keras.models.load_model(os.path.join(os.pardir,'Model','model_23_04_2025_05_38_1745386680_no_lstm_9_head_new_treat_data.keras'))
+    my_model = keras.models.load_model(os.path.join(os.pardir,'Model','model_07_05_2025_15_07_1746630447_no_lstm_108_dim.keras'))
     feed_thread = Thread(target=feed)
     predict_thread = Thread(target=predict,args=(my_model,))
     feed_thread.start()

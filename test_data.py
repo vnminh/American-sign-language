@@ -240,7 +240,7 @@ def predict(my_model: keras.Model):
         y = my_model.predict(x[0],verbose=0)
         class_id = np.argmax(y)
         # print('PREDICT THREAD:','predict word','\033[30;31m'+CLASS_LIST[class_id]+'\033[0m'+f': {round(y[0][class_id]*100)}')
-        if y[0][class_id] < 0.9: class_id = len(CLASS_LIST) - 1
+        if y[0][class_id] < 0.8: class_id = len(CLASS_LIST) - 1
         print('PREDICT THREAD:','predict word','\033[30;31m'+CLASS_LIST[class_id]+'\033[0m')
 
 

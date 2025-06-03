@@ -12,8 +12,9 @@ import math
 FILE_PATH_FOR_CLASS = os.path.join(os.pardir,'class_name.txt')
 CLASS_LIST = [name.strip() for name in open(FILE_PATH_FOR_CLASS,'r').readlines()]
 NUM_WORD = len(CLASS_LIST)
-SEQ_LEN = 20
+SEQ_LEN = 10
 IMAGE_CAM_HEIGHT = 480
+IMAGE_CAM_WIDTH = 640
 #SHARED THREAD VAR
 sample_queue = Queue(10) 
 #INIT MEDIAPIPE MODEL
@@ -75,7 +76,7 @@ class ViTSignLanguageModel(keras.Model):
             lambda tensor: keras.layers.concatenate((keras.ops.repeat(self.class_token, keras.ops.shape(tensor)[0], axis=0), tensor), axis = 1),
             output_shape=(seq_len + 1, 162))
         self.dropout = keras.layers.Dropout(0.2)
-        self.encoders = [TransformerEncoder(162, 12, 512) for _ in range(6)]
+        self.encoders = [TransformerEncoder(162, 9, 512) for _ in range(6)]
         self.norm1 = keras.layers.LayerNormalization(epsilon=1e-6)
         self.glo_avg_pool = keras.layers.GlobalAveragePooling1D()
         self.norm2 = keras.layers.LayerNormalization(epsilon=1e-6)
@@ -183,8 +184,8 @@ def scale_hand(list_of_landmarks: np.ndarray, size=1):
 
 
 def normalized_hand(list_of_landmarks: np.ndarray):
-    assert list_of_landmarks.shape == (21, 3)
-    assert not np.all(list_of_landmarks == 0)
+    # Make z value into range [0,1]
+    list_of_landmarks[:, 2] = (list_of_landmarks[:, 2] - np.min(list_of_landmarks[:, 2])) / (np.max(list_of_landmarks[:, 2]) - np.min(list_of_landmarks[:, 2]))
 
     # First rotate to normal
     normal, base = get_hand_normal(list_of_landmarks)
@@ -194,68 +195,80 @@ def normalized_hand(list_of_landmarks: np.ndarray):
     angle = get_hand_rotation(list_of_landmarks)
     list_of_landmarks = rotate_hand(list_of_landmarks, angle)
 
-    # Scale list_of_landmarks such that BASE-M_CMC is of size 200
+    # Scale list_of_landmarks such that BASE-M_CMC is of size 1
     list_of_landmarks = scale_hand(list_of_landmarks, 200)
 
     return list_of_landmarks
 #-----------------------------------------------------------------------------------------------------------------
-def get_body_rotation(list_of_landmarks: np.ndarray, axis:str):
+def get_body_rotation(list_of_landmarks: np.ndarray, axis: str):
     '''
     axis = ['y','z']
     '''
     return math.degrees(math.atan2(list_of_landmarks[0, 1 if axis == 'z' else 2], list_of_landmarks[0, 0]))
 
-def rotate_body(list_of_landmarks, angle, axis:str):
+
+def rotate_body(list_of_landmarks, angle, axis: str):
     '''
     axis = ['y','z']
     '''
-    r = Rotation.from_euler(axis, angle if axis == 'z' else -angle, degrees=True)
+    r = Rotation.from_euler(axis, angle if axis ==
+                            'z' else -angle, degrees=True)
     return np.dot(list_of_landmarks, r.as_matrix())
 
+
 def scale_body(list_of_landmarks: np.ndarray, size=1):
-    p1 = list_of_landmarks[0]  # Wrist
-    p2 = list_of_landmarks[1]  # Middle CMC
+    p1 = list_of_landmarks[0]  # left shoulder
+    p2 = list_of_landmarks[1]  # right shoulder
     current_size = np.sqrt(np.square((p2 - p1)/2).sum())
 
     list_of_landmarks *= size / current_size
     return list_of_landmarks
 
+
 def out_bound(left_wrist, right_wrist, half_w, top_h, bot_h):
-        left, right = - half_w, half_w
-        top, bottom = - top_h, bot_h
-        out = lambda land_mark: land_mark[0] < left or land_mark[0] > right or land_mark[1] < top or land_mark[1] > bottom
-        return out(left_wrist) and out(right_wrist)
+    left, right = - half_w, half_w
+    top, bottom = - top_h, bot_h
+    def out(
+        land_mark): return land_mark[0] < left or land_mark[0] > right or land_mark[1] < top or land_mark[1] > bottom
+    return out(left_wrist) and out(right_wrist)
+
 
 def normalized_body(list_of_landmarks):
-    #get mid point of 2 shoulder
+    # Make z value into range [0,1]
+    list_of_landmarks[:, 2] = (list_of_landmarks[:, 2] - np.min(list_of_landmarks[:, 2])) / (np.max(list_of_landmarks[:, 2]) - np.min(list_of_landmarks[:, 2]))
+    
+    # get mid point of 2 shoulder
     center = (list_of_landmarks[0] + list_of_landmarks[1])/2
-    #take this center as origin
+    
+    # take this center as origin
     list_of_landmarks = list_of_landmarks - center
-    #rotate around z 
+    
+    # rotate around z
     angle = get_body_rotation(list_of_landmarks, 'z')
     list_of_landmarks = rotate_body(list_of_landmarks, angle, 'z')
-    #rotate around y
+    
+    # rotate around y
     angle = get_body_rotation(list_of_landmarks, 'y')
     list_of_landmarks = rotate_body(list_of_landmarks, angle, 'y')
-    #get box
-    shoulder_distance = np.linalg.norm(list_of_landmarks[0] - list_of_landmarks[1])
+    
+    # get box
+    shoulder_distance = np.linalg.norm(
+        list_of_landmarks[0] - list_of_landmarks[1])
     top_h, bot_h = (4.0/3.0)*shoulder_distance, 1.5*shoulder_distance
     half_w = shoulder_distance*1.5
-    #check if out bound of box
+    
+    # check if out bound of box
     if out_bound(list_of_landmarks[4], list_of_landmarks[5], half_w, top_h, bot_h):
         return None, True
-    
-    #scale to shoulder size
+
+    # scale to shoulder size
     list_of_landmarks = scale_body(list_of_landmarks, 200)
 
     return list_of_landmarks, False
 #-----------------------------------------------------------------------------------------------------------------
-
 def extract_keypoints(res_holistic):
-    '''
-    return vector feature of a frame shape (12*3 + 42*3,)
-    '''
-    if (not res_holistic.pose_landmarks): return np.zeros((12*3 + 42*3,))
+    
+    if (not res_holistic.pose_landmarks): return np.zeros((12*3 + 42*3,)), 'CAN NOT DECTECT WHOLE'
     #extract and normalize pose_landmarks (just shoulder and arms 11->22)
     pose_landmarks = np.array([[
                                 res_holistic.pose_landmarks.landmark[i].x,
@@ -265,12 +278,10 @@ def extract_keypoints(res_holistic):
     pose_landmarks, isOutBound = normalized_body(pose_landmarks)
     # check wrist out bound of box
     if isOutBound:
-        # print('OUT')
-        return np.zeros((12*3 + 42*3,))
+        return np.zeros((12*3 + 42*3,)), 'OUT'
     #extract and normalize hand_landmarks
     if not res_holistic.left_hand_landmarks and not res_holistic.right_hand_landmarks:
-        # print('NOT DETECT BOTH HANDS')
-        return np.zeros((12*3 + 42*3,))
+        return np.zeros((12*3 + 42*3,)), 'NOT DETECT BOTH HANDS'
     hand_landmarks = {'Left':np.zeros((21,3),dtype=np.double),'Right':np.zeros((21,3),dtype=np.double)}
     if res_holistic.left_hand_landmarks:
         hand_landmarks['Left'] = np.array([[landmark.x,landmark.y,landmark.z] for landmark in res_holistic.left_hand_landmarks.landmark],dtype=np.double)
@@ -280,7 +291,7 @@ def extract_keypoints(res_holistic):
         hand_landmarks['Right'] = np.array([[landmark.x,landmark.y,landmark.z] for landmark in res_holistic.right_hand_landmarks.landmark],dtype=np.double)
         hand_landmarks['Right'] = normalized_hand(hand_landmarks['Right'])
 
-    return np.concatenate((pose_landmarks,hand_landmarks['Left'], hand_landmarks['Right']), axis = None)
+    return np.concatenate((pose_landmarks,hand_landmarks['Left'], hand_landmarks['Right']), axis = None), None
 
 def feed():
     '''
@@ -296,13 +307,12 @@ def feed():
         if not success:
             break
         #process
-        scale = IMAGE_CAM_HEIGHT / frame.shape[0]
-        frame = cv2.resize(frame,(int(frame.shape[1]*scale), int(frame.shape[0]*scale)))
+        frame = cv2.resize(frame,(IMAGE_CAM_WIDTH, IMAGE_CAM_HEIGHT))
         frame = cv2.flip(frame, 1)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         res = mp_holistic.process(frame_rgb)
         #Extract
-        time_seq_feature.append(extract_keypoints(res))
+        time_seq_feature.append(extract_keypoints(res)[0])
         #display
         drawLandmarks(frame, res)
         cv2.imshow('video',frame)
@@ -341,7 +351,7 @@ def predict(my_model: keras.Model):
         print('PREDICT THREAD:','predict word','\033[30;31m'+CLASS_LIST[class_id]+'\033[0m'+f': {round(y[0][class_id]*100)}')
 
 if __name__=='__main__':
-    my_model = keras.models.load_model(os.path.join(os.pardir,'Model','model_15_05_2025_04_56_1747284989_162_dim_concat_2norm.keras'))
+    my_model = keras.models.load_model(r'D:\MinhDUT\KY 6, NAM 24-25\PBL5\Model\10_SEQ_LEN ver\model_03_06_2025_11_32_1748950351_10_SEQLEN_162_dim.keras')
     feed_thread = Thread(target=feed)
     predict_thread = Thread(target=predict,args=(my_model,))
     feed_thread.start()
